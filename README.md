@@ -14,7 +14,7 @@ All personal, academic, internship, project, certification, and achievement data
 - **Full Backend API**: Express.js REST API with TypeScript, Mongoose models, rate limiting (`express-rate-limit`), security headers (`helmet`), CORS, and JWT authentication.
 - **Database Integration & Auto-Seeding**: Automatic seed pipeline for MongoDB Atlas with fallback support so the site operates smoothly offline or online.
 - **Authenticated Admin Portal**: Live CRUD management interface (`/admin`) for Projects, Certifications, Achievements, Experience, and Contact Messages.
-- **Resume Viewer & Download**: Native PDF viewer modal and direct download pointing to `/public/resume.pdf`.
+- **Resume Viewer & Download**: Native PDF viewer modal and direct download pointing to `/public/resume.pdf` & `/api/resume`.
 - **SEO & Accessibility**: WCAG 2.2 compliant focus rings, semantic HTML5, aria labels, JSON-LD structured data (`Person` schema), OpenGraph & Twitter tags, dynamic `sitemap.xml`, and `robots.txt`.
 
 ---
@@ -29,7 +29,8 @@ portfolio/
 │   ├── api/
 │   │   ├── contact/route.ts        # POST contact message handler
 │   │   ├── health/route.ts         # GET system health status
-│   │   └── projects/route.ts       # GET projects list
+│   │   ├── projects/route.ts       # GET projects list
+│   │   └── resume/route.ts         # GET resume PDF stream handler
 │   ├── projects/
 │   │   └── [slug]/page.tsx         # Dedicated project detail page & architecture
 │   ├── globals.css                 # Custom Tailwind, glassmorphism, scrollbars, animations
@@ -229,7 +230,8 @@ Default Admin User created:
 - [x] Dedicated project pages (`/projects/[slug]`) and preview modals function properly.
 - [x] GitHub and LinkedIn external links open in new tabs.
 - [x] Contact form validates email format and message length with loading/success feedback.
-- [x] PDF Resume view & direct download links work via `/public/resume.pdf`.
+- [x] PDF Resume view & direct download links work via `/public/resume.pdf` & `/api/resume`.
 - [x] SEO metadata, OpenGraph, JSON-LD schema, `sitemap.xml`, and `robots.txt` generated.
 - [x] `prefers-reduced-motion` supported for animations.
 - [x] WCAG 2.2 accessibility keyboard navigation supported.
+
