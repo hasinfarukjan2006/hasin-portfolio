@@ -2,7 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { PROJECTS_DATA, CERTIFICATIONS_DATA, ACHIEVEMENTS_DATA, EXPERIENCE_DATA, ProjectItem, CertificationItem, AchievementItem, ExperienceItem } from '@/lib/resumeData';
-import { Lock, LogOut, Plus, Trash2, Edit, Star, Shield, Mail, CheckCircle2, AlertCircle } from 'lucide-react';
+import {
+  Lock, LogOut, Plus, Trash2, Edit, Star, Shield, Mail, CheckCircle2, AlertCircle,
+  RefreshCw, Search, Reply, ExternalLink, MailOpen, Calendar, User, Clock, Inbox, Filter
+} from 'lucide-react';
 import Link from 'next/link';
 
 export default function AdminDashboardPage() {
@@ -18,7 +21,14 @@ export default function AdminDashboardPage() {
   const [certificationsList, setCertificationsList] = useState<CertificationItem[]>(CERTIFICATIONS_DATA);
   const [achievementsList, setAchievementsList] = useState<AchievementItem[]>(ACHIEVEMENTS_DATA);
   const [experienceList, setExperienceList] = useState<ExperienceItem[]>(EXPERIENCE_DATA);
+  
+  // Mail Inbox state
   const [messagesList, setMessagesList] = useState<any[]>([]);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterTab, setFilterTab] = useState<'all' | 'unread' | 'starred'>('all');
+  const [replyText, setReplyText] = useState('');
 
   // Form modals state
   const [newProjectTitle, setNewProjectTitle] = useState('');
@@ -37,6 +47,30 @@ export default function AdminDashboardPage() {
       setIsAuthenticated(true);
     }
   }, []);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchMessages();
+    }
+  }, [isAuthenticated]);
+
+  const fetchMessages = async () => {
+    setLoadingMessages(true);
+    try {
+      const res = await fetch('/api/contact');
+      const data = await res.json();
+      if (res.ok && data.success && Array.isArray(data.data)) {
+        setMessagesList(data.data);
+        if (data.data.length > 0 && !selectedMessageId) {
+          setSelectedMessageId(data.data[0].id || data.data[0]._id);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch contact messages:', err);
+    } finally {
+      setLoadingMessages(false);
+    }
+  };
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -119,6 +153,81 @@ export default function AdminDashboardPage() {
     setNewAchDetail('');
   };
 
+  // Mail Operations
+  const markAsRead = async (msgId: string, currentReadStatus: boolean) => {
+    const newRead = !currentReadStatus;
+    setMessagesList((prev) =>
+      prev.map((m) => ((m.id === msgId || m._id === msgId) ? { ...m, read: newRead } : m))
+    );
+    try {
+      await fetch('/api/contact', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: msgId, read: newRead }),
+      });
+    } catch (err) {
+      console.error('Failed to update message status:', err);
+    }
+  };
+
+  const toggleStar = async (msgId: string, currentStarredStatus: boolean) => {
+    const newStarred = !currentStarredStatus;
+    setMessagesList((prev) =>
+      prev.map((m) => ((m.id === msgId || m._id === msgId) ? { ...m, starred: newStarred } : m))
+    );
+    try {
+      await fetch('/api/contact', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: msgId, starred: newStarred }),
+      });
+    } catch (err) {
+      console.error('Failed to update star status:', err);
+    }
+  };
+
+  const deleteMessage = async (msgId: string) => {
+    setMessagesList((prev) => prev.filter((m) => (m.id !== msgId && m._id !== msgId)));
+    if (selectedMessageId === msgId) {
+      const remaining = messagesList.filter((m) => (m.id !== msgId && m._id !== msgId));
+      setSelectedMessageId(remaining.length > 0 ? (remaining[0].id || remaining[0]._id) : null);
+    }
+    try {
+      await fetch(`/api/contact?id=${msgId}`, { method: 'DELETE' });
+    } catch (err) {
+      console.error('Failed to delete message:', err);
+    }
+  };
+
+  const selectMessage = (msg: any) => {
+    const msgId = msg.id || msg._id;
+    setSelectedMessageId(msgId);
+    if (!msg.read) {
+      markAsRead(msgId, false);
+    }
+  };
+
+  // Filtered messages list
+  const filteredMessages = messagesList.filter((msg) => {
+    const query = searchQuery.toLowerCase().trim();
+    const matchesSearch =
+      !query ||
+      msg.name?.toLowerCase().includes(query) ||
+      msg.email?.toLowerCase().includes(query) ||
+      msg.subject?.toLowerCase().includes(query) ||
+      msg.message?.toLowerCase().includes(query);
+
+    if (!matchesSearch) return false;
+
+    if (filterTab === 'unread') return !msg.read;
+    if (filterTab === 'starred') return !!msg.starred;
+    return true;
+  });
+
+  const selectedMsg = messagesList.find((m) => (m.id === selectedMessageId || m._id === selectedMessageId));
+  const unreadCount = messagesList.filter((m) => !m.read).length;
+  const starredCount = messagesList.filter((m) => m.starred).length;
+
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-dark-50 text-slate-100 flex items-center justify-center p-4">
@@ -191,7 +300,7 @@ export default function AdminDashboardPage() {
           </div>
           <div>
             <h1 className="text-base font-bold text-white">HASIN F - Admin Dashboard</h1>
-            <p className="text-[11px] text-slate-400 font-mono">Portfolio Content & Data Management</p>
+            <p className="text-[11px] text-slate-400 font-mono">Portfolio Content & Mail Management</p>
           </div>
         </div>
 
@@ -256,7 +365,15 @@ export default function AdminDashboardPage() {
                 activeTab === 'contact' ? 'bg-primary-600 text-white' : 'text-slate-300 hover:bg-slate-800'
               }`}
             >
-              <span>Contact Messages</span>
+              <span className="flex items-center gap-2">
+                <Mail className="w-4 h-4" />
+                <span>Mail Inbox</span>
+              </span>
+              {unreadCount > 0 && (
+                <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-primary-500 text-white animate-pulse">
+                  {unreadCount}
+                </span>
+              )}
             </button>
           </div>
         </aside>
@@ -462,33 +579,296 @@ export default function AdminDashboardPage() {
             </div>
           )}
 
+          {/* Contact Mail Inbox Tab */}
           {activeTab === 'contact' && (
-            <div className="glass-card rounded-2xl p-6 border border-slate-800">
-              <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                <Mail className="w-5 h-5 text-primary-400" /> Received Contact Messages
-              </h3>
-              <p className="text-xs text-slate-400 mb-4">
-                Submissions from the portfolio contact form.
-              </p>
+            <div className="space-y-4">
+              {/* Top Header & Search Bar */}
+              <div className="glass-card rounded-2xl p-4 sm:p-6 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                    <Mail className="w-5 h-5 text-primary-400" /> Mail Inbox
+                    <span className="text-xs font-mono px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                      {messagesList.length} Messages
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Contact form submissions are delivered directly to your Gmail inbox (<code className="text-primary-400 font-mono">hasinfarukjan@gmail.com</code>) and synced here.
+                  </p>
+                </div>
 
-              {messagesList.length === 0 ? (
-                <div className="p-8 text-center bg-slate-900/50 rounded-xl border border-slate-800 text-slate-400 text-sm">
-                  No contact messages received yet.
+                <button
+                  onClick={fetchMessages}
+                  disabled={loadingMessages}
+                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 transition-colors shrink-0"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loadingMessages ? 'animate-spin' : ''}`} />
+                  <span>Refresh Inbox</span>
+                </button>
+              </div>
+
+              {/* Filters & Search Toolbar */}
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+                {/* Search Box */}
+                <div className="md:col-span-6 relative">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search by sender, email, or subject..."
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-primary-500 transition-all"
+                  />
                 </div>
-              ) : (
-                <div className="space-y-3">
-                  {messagesList.map((msg, i) => (
-                    <div key={i} className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
-                      <div className="flex justify-between items-center text-xs font-mono text-primary-400">
-                        <span>{msg.name} ({msg.email})</span>
-                        <span>{new Date(msg.createdAt).toLocaleDateString()}</span>
+
+                {/* Filter Tabs */}
+                <div className="md:col-span-6 flex items-center gap-2 justify-start md:justify-end">
+                  <button
+                    onClick={() => setFilterTab('all')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                      filterTab === 'all'
+                        ? 'bg-primary-600 text-white font-semibold'
+                        : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                    }`}
+                  >
+                    All ({messagesList.length})
+                  </button>
+                  <button
+                    onClick={() => setFilterTab('unread')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 ${
+                      filterTab === 'unread'
+                        ? 'bg-primary-600 text-white font-semibold'
+                        : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                    }`}
+                  >
+                    <span>Unread</span>
+                    {unreadCount > 0 && (
+                      <span className="w-4 h-4 rounded-full bg-primary-400 text-dark-100 text-[10px] font-bold flex items-center justify-center">
+                        {unreadCount}
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setFilterTab('starred')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 ${
+                      filterTab === 'starred'
+                        ? 'bg-amber-600 text-white font-semibold'
+                        : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                    }`}
+                  >
+                    <Star className="w-3 h-3 fill-current text-amber-400" />
+                    <span>Starred ({starredCount})</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Split View Container */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-[520px]">
+                {/* Left Panel: Inbox List */}
+                <div className="lg:col-span-5 glass-card rounded-2xl p-3 border border-slate-800 flex flex-col h-[520px] overflow-hidden">
+                  <div className="px-3 py-2 border-b border-slate-800 flex items-center justify-between text-xs text-slate-400 font-mono">
+                    <span>INBOX LIST</span>
+                    <span>{filteredMessages.length} Messages</span>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto space-y-2 p-1 mt-2 pr-1 custom-scrollbar">
+                    {filteredMessages.length === 0 ? (
+                      <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-400">
+                        <Inbox className="w-10 h-10 text-slate-600 mb-2" />
+                        <p className="text-xs">No emails match your filter.</p>
                       </div>
-                      <h5 className="text-sm font-bold text-white">{msg.subject}</h5>
-                      <p className="text-xs text-slate-300">{msg.message}</p>
-                    </div>
-                  ))}
+                    ) : (
+                      filteredMessages.map((msg) => {
+                        const msgId = msg.id || msg._id;
+                        const isSelected = selectedMessageId === msgId;
+                        const initial = msg.name ? msg.name.charAt(0).toUpperCase() : 'M';
+                        const timeString = new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                        const dateString = new Date(msg.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' });
+
+                        return (
+                          <div
+                            key={msgId}
+                            onClick={() => selectMessage(msg)}
+                            className={`p-3.5 rounded-xl border transition-all cursor-pointer relative ${
+                              isSelected
+                                ? 'bg-primary-600/15 border-primary-500/60 shadow-glow-blue'
+                                : msg.read
+                                ? 'bg-slate-900/60 border-slate-800/80 hover:bg-slate-800/60'
+                                : 'bg-slate-900 border-primary-500/30 hover:bg-slate-800/80'
+                            }`}
+                          >
+                            {!msg.read && (
+                              <div className="absolute top-3.5 right-3 w-2 h-2 rounded-full bg-primary-400 ring-4 ring-primary-500/20" />
+                            )}
+
+                            <div className="flex items-start gap-3">
+                              {/* Avatar */}
+                              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary-500 to-purpleAccent-600 text-white font-bold flex items-center justify-center shrink-0 shadow-md text-sm">
+                                {initial}
+                              </div>
+
+                              <div className="flex-1 min-w-0 pr-4">
+                                <div className="flex items-center justify-between gap-2 mb-0.5">
+                                  <h4 className={`text-xs truncate ${!msg.read ? 'font-extrabold text-white' : 'font-semibold text-slate-200'}`}>
+                                    {msg.name}
+                                  </h4>
+                                  <span className="text-[10px] font-mono text-slate-400 shrink-0">
+                                    {dateString}
+                                  </span>
+                                </div>
+
+                                <h5 className={`text-xs truncate mb-1 ${!msg.read ? 'font-bold text-primary-300' : 'text-slate-300'}`}>
+                                  {msg.subject}
+                                </h5>
+
+                                <p className="text-[11px] text-slate-400 line-clamp-1">
+                                  {msg.message}
+                                </p>
+                              </div>
+
+                              {/* Star button */}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleStar(msgId, !!msg.starred);
+                                }}
+                                className="text-slate-500 hover:text-amber-400 transition-colors p-1"
+                              >
+                                <Star className={`w-3.5 h-3.5 ${msg.starred ? 'fill-amber-400 text-amber-400' : ''}`} />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
-              )}
+
+                {/* Right Panel: Email Detail Reader */}
+                <div className="lg:col-span-7 glass-card rounded-2xl p-6 border border-slate-800 flex flex-col h-[520px]">
+                  {selectedMsg ? (
+                    <div className="flex flex-col h-full overflow-hidden">
+                      {/* Reader Action Toolbar */}
+                      <div className="pb-4 border-b border-slate-800 flex items-center justify-between gap-2 shrink-0">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => toggleStar(selectedMsg.id || selectedMsg._id, !!selectedMsg.starred)}
+                            className={`p-2 rounded-lg border text-xs font-semibold transition-colors ${
+                              selectedMsg.starred
+                                ? 'bg-amber-500/10 border-amber-500/40 text-amber-400'
+                                : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'
+                            }`}
+                            title="Star Email"
+                          >
+                            <Star className={`w-4 h-4 ${selectedMsg.starred ? 'fill-current' : ''}`} />
+                          </button>
+
+                          <button
+                            onClick={() => markAsRead(selectedMsg.id || selectedMsg._id, !!selectedMsg.read)}
+                            className="p-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:text-white text-xs flex items-center gap-1.5 transition-colors"
+                            title={selectedMsg.read ? 'Mark as Unread' : 'Mark as Read'}
+                          >
+                            <MailOpen className="w-4 h-4" />
+                            <span className="hidden sm:inline text-xs">{selectedMsg.read ? 'Mark Unread' : 'Mark Read'}</span>
+                          </button>
+
+                          <button
+                            onClick={() => deleteMessage(selectedMsg.id || selectedMsg._id)}
+                            className="p-2 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-400 hover:bg-rose-500/20 text-xs flex items-center gap-1.5 transition-colors"
+                            title="Delete Email"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        <a
+                          href={`mailto:${selectedMsg.email}?subject=Re: ${encodeURIComponent(selectedMsg.subject)}&body=${encodeURIComponent('\n\n--- Original Message ---\nFrom: ' + selectedMsg.name + ' <' + selectedMsg.email + '>\n' + selectedMsg.message)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-white bg-primary-600 hover:bg-primary-500 shadow-glow-blue transition-colors shrink-0"
+                        >
+                          <Reply className="w-3.5 h-3.5" />
+                          <span>Reply via Email Client</span>
+                        </a>
+                      </div>
+
+                      {/* Message Detail Content (Scrollable) */}
+                      <div className="flex-1 overflow-y-auto py-4 space-y-4 pr-1 custom-scrollbar">
+                        {/* Subject Title */}
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-primary-500/10 border border-primary-500/30 text-primary-400 font-bold uppercase">
+                              Portfolio Contact
+                            </span>
+                            <span className="text-xs text-slate-400 font-mono">
+                              {new Date(selectedMsg.createdAt).toLocaleString()}
+                            </span>
+                          </div>
+                          <h2 className="text-xl font-extrabold text-white tracking-tight">
+                            {selectedMsg.subject}
+                          </h2>
+                        </div>
+
+                        {/* Sender Card */}
+                        <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between gap-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-purpleAccent-600 text-white font-bold flex items-center justify-center shrink-0 shadow-lg text-base">
+                              {selectedMsg.name ? selectedMsg.name.charAt(0).toUpperCase() : 'M'}
+                            </div>
+                            <div>
+                              <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                                {selectedMsg.name}
+                                <span className="text-xs font-normal text-slate-400 font-mono">
+                                  &lt;{selectedMsg.email}&gt;
+                                </span>
+                              </h4>
+                              <p className="text-xs text-slate-400">
+                                To: <span className="text-slate-200">HASIN F</span> &lt;hasinfarukjan@gmail.com&gt;
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Message Body Box */}
+                        <div className="p-5 rounded-xl bg-slate-950/80 border border-slate-800 text-slate-200 text-sm leading-relaxed whitespace-pre-wrap font-sans min-h-[140px] shadow-inner border-l-4 border-l-primary-500">
+                          {selectedMsg.message}
+                        </div>
+
+                        {/* Quick Reply Form */}
+                        <div className="pt-2 border-t border-slate-800/80">
+                          <label className="block text-xs font-mono text-slate-300 mb-1.5 font-medium flex items-center gap-1.5">
+                            <Reply className="w-3.5 h-3.5 text-primary-400" />
+                            <span>Quick Reply Note</span>
+                          </label>
+                          <textarea
+                            rows={3}
+                            value={replyText}
+                            onChange={(e) => setReplyText(e.target.value)}
+                            placeholder={`Type your reply to ${selectedMsg.name}...`}
+                            className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-primary-500 transition-all resize-y"
+                          />
+                          <div className="mt-2 flex justify-end">
+                            <a
+                              href={`mailto:${selectedMsg.email}?subject=Re: ${encodeURIComponent(selectedMsg.subject)}&body=${encodeURIComponent(replyText + '\n\n--- Original Message ---\nFrom: ' + selectedMsg.name + '\n' + selectedMsg.message)}`}
+                              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-purpleAccent-600 hover:bg-purpleAccent-500 transition-colors shadow-glow-purple"
+                            >
+                              <Send className="w-3.5 h-3.5" />
+                              <span>Send Reply to {selectedMsg.name}</span>
+                            </a>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="h-full flex flex-col items-center justify-center text-center p-8 text-slate-400">
+                      <Inbox className="w-14 h-14 text-slate-700 mb-3 animate-pulse" />
+                      <h4 className="text-base font-bold text-slate-300">No Email Selected</h4>
+                      <p className="text-xs text-slate-500 max-w-xs mt-1">
+                        Select a contact message from the inbox list on the left to read its full contents and reply.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
         </main>
